@@ -206,7 +206,10 @@ class EntityState(object):
 
                 else:
                     if value.__odata__.id:
-                        insert_data['{0}@odata.bind'.format(prop.name)] = value.__odata__.id
+                        keys = {}
+                        for key in value.__odata__.primary_key_properties:
+                            keys[key[0]] = value.__odata__[value.__odata__.primary_key_properties[0][0]]
+                        insert_data[prop.name] = keys
                     else:
                         insert_data[prop.name] = self._clean_new_entity(value)
 
