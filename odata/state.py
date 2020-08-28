@@ -141,7 +141,7 @@ class EntityState(object):
 
     def data_for_update(self):
         update_data = OrderedDict()
-        update_data['@odata.type'] = self.entity.__odata_type__
+        # update_data['@odata.type'] = self.entity.__odata_type__
 
         for _, prop in self.dirty_properties:
             if prop.is_computed_value:
@@ -164,7 +164,7 @@ class EntityState(object):
     def _clean_new_entity(self, entity):
         """:type entity: odata.entity.EntityBase """
         insert_data = OrderedDict()
-        insert_data['@odata.type'] = entity.__odata_type__
+        # insert_data['@odata.type'] = entity.__odata_type__
 
         es = entity.__odata__
         for _, prop in es.properties:
