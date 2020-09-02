@@ -136,6 +136,21 @@ class ODataConnection(object):
             return response.json()
         # no exceptions here, POSTing to Actions may not return data
 
+    def execute_post_raw(self, url, headers, data: str, params=None):
+        headers = {**ODataConnection.base_headers, **headers}
+
+        self.log.info(u'POST {0}'.format(url))
+        self.log.info(u'Payload: {0}'.format(data))
+        data = data.replace('\n', '\r\n')
+        response = self._do_post(url, data=data, headers=headers, params=params)
+        self._handle_odata_error(response)
+        response_ct = response.headers.get('content-type', '')
+
+        if response.status_code == requests.codes.no_content:
+            return
+        if 'application/json' in response_ct:
+            return response.json()
+
     def execute_patch(self, url, data):
         headers = {
             'Content-Type': 'application/json',

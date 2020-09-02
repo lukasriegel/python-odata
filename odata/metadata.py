@@ -79,6 +79,7 @@ class MetaData(object):
                             _search_entity,
                             collection=is_collection,
                             foreign_key=foreign_key,
+                            navigated_property_type=_search_type
                         )
                         setattr(entity, name, nav)
 

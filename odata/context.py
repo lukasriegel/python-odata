@@ -12,6 +12,7 @@ class Context:
     def __init__(self, session=None, auth=None):
         self.log = logging.getLogger('odata.context')
         self.connection = ODataConnection(session=session, auth=auth)
+        self.batch = False
 
     def query(self, entitycls):
         q = Query(entitycls, connection=self.connection)

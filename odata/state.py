@@ -170,47 +170,61 @@ class EntityState(object):
         for _, prop in es.properties:
             if prop.is_computed_value:
                 continue
-
             insert_data[prop.name] = es[prop.name]
 
-        # Allow pk properties only if they have values
         for _, pk_prop in es.primary_key_properties:
             if insert_data[pk_prop.name] is None:
                 insert_data.pop(pk_prop.name)
 
         # Deep insert from nav properties
         for prop_name, prop in es.navigation_properties:
-            if prop.foreign_key:
-                insert_data.pop(prop.foreign_key, None)
-
+            # source, <navProp>
             value = getattr(entity, prop_name, None)
-            """:type : None | odata.entity.EntityBase | list[odata.entity.EntityBase]"""
-            if value is not None:
+            if value is None: # no value provided, ignore this property
+                continue
+            if prop.is_collection: # to-many navigation (to a collection)
+                binds = []
 
-                if prop.is_collection:
-                    binds = []
+                # binds must be added first
+                for i in [i for i in value if i.__odata__.id]:
+                    binds.append(i.__odata__.id)
 
-                    # binds must be added first
-                    for i in [i for i in value if i.__odata__.id]:
-                        binds.append(i.__odata__.id)
+                if len(binds):
+                    insert_data['{0}@odata.bind'.format(prop.name)] = binds
 
-                    if len(binds):
-                        insert_data['{0}@odata.bind'.format(prop.name)] = binds
+                new_entities = []
+                for i in [i for i in value if i.__odata__.id is None]:
+                    new_entities.append(self._clean_new_entity(i))
 
-                    new_entities = []
-                    for i in [i for i in value if i.__odata__.id is None]:
-                        new_entities.append(self._clean_new_entity(i))
+                if len(new_entities):
+                    # TODO: our API does not support it but I assume thats a limitation of the server framework
+                    #       and not oData itself.
+                    raise ValueError((
+                        "Deep insert/create for to-many collections is not supported. "
+                        "Property '%s' must not be set or only reference alread existing entity instances."
+                    ) % (prop_name))
 
-                    if len(new_entities):
-                        insert_data[prop.name] = new_entities
+                # if len(new_entities):
+                #     insert_data[prop.name] = new_entities
 
+            else: # to-one navigation
+                reference_existing = insert_data.get(prop.foreign_key) is not None
+                if reference_existing:
+                    raise ValueError("Cannot have a foreign key reference in '%s' to an existing entitiy instance and also provide a value for navigation property '%s'" % (prop.foreign_key, prop_name))
+
+                if value.__odata__.id:
+                    # we are referencing an already created entity instance
+                    raise ValueError((
+                        "Entity instance '%s' for navigation property already exists (id '%s') and hence "
+                        "cannot be used to create a new instance. To assign an existing instance use "
+                        "the ID as value for property '%s'."
+                    ) % (prop_name, value.__odata__.id, prop.foreign_key))
+                    # keys = {}
+                    # print(value.__odata__.id)
+                    # for key in value.__odata__.primary_key_properties:
+                    #     keys[key[0]] = value.__odata__[value.__odata__.primary_key_properties[0][0]]
+                    # insert_data[prop.name] = keys
                 else:
-                    if value.__odata__.id:
-                        keys = {}
-                        for key in value.__odata__.primary_key_properties:
-                            keys[key[0]] = value.__odata__[value.__odata__.primary_key_properties[0][0]]
-                        insert_data[prop.name] = keys
-                    else:
-                        insert_data[prop.name] = self._clean_new_entity(value)
+                    insert_data[prop.name] = self._clean_new_entity(value)
 
         return insert_data

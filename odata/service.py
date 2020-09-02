@@ -59,6 +59,7 @@ from .entity import EntityBase, declarative_base
 from .metadata import MetaData
 from .exceptions import ODataError
 from .context import Context
+from .batchcontext import BatchContext
 from .action import Action, Function
 
 __all__ = (
@@ -82,6 +83,7 @@ class ODataService(object):
         self.collections = {}
         self.log = logging.getLogger('odata.service')
         self.default_context = Context(auth=auth, session=session)
+        self.context = self.default_context
 
         self.entities = {}
         """
@@ -147,16 +149,27 @@ class ODataService(object):
     def __repr__(self):
         return u'<ODataService at {0}>'.format(self.url)
 
-    def create_context(self, auth=None, session=None):
+    def create_context(self, auth=None, session=None, batch=False):
         """
         Create new context to use for session-like usage
 
         :param auth: Custom Requests auth object to use for credentials
         :param session: Custom Requests session to use for communication with the endpoint
+        :param batch: Set to true if you want to use odata $batch requests
         :return: Context instance
         :rtype: Context
         """
+        if batch == True:
+            return BatchContext(self, auth=auth, session=session)
         return Context(auth=auth, session=session)
+
+    def use_context(self, context):
+        if context is None:
+          return self.use_default_context()
+        self.context = context
+
+    def use_default_context(self):
+        self.context = self.default_context
 
     def describe(self, entity):
         """
@@ -168,7 +181,7 @@ class ODataService(object):
 
     def is_entity_saved(self, entity):
         """Returns boolean indicating entity's status"""
-        return self.default_context.is_entity_saved(entity)
+        return self.context.is_entity_saved(entity)
 
     def query(self, entitycls):
         """
@@ -177,7 +190,7 @@ class ODataService(object):
         :param entitycls: Entity to query
         :return: Query object
         """
-        return self.default_context.query(entitycls)
+        return self.context.query(entitycls)
 
     def delete(self, entity):
         """
@@ -186,9 +199,9 @@ class ODataService(object):
         :type entity: EntityBase
         :raises ODataConnectionError: Delete not allowed or a serverside error. Server returned an HTTP error code
         """
-        return self.default_context.delete(entity)
+        return self.context.delete(entity)
 
-    def save(self, entity, force_refresh=True):
+    def save(self, entity, force_refresh=True, parent_resource=None):
         """
         Creates a POST or PATCH call to the service. If the entity already has
         a primary key, an update is called. Otherwise the entity is inserted
@@ -198,4 +211,6 @@ class ODataService(object):
         :param force_refresh: Read full entity data again from service after PATCH call
         :raises ODataConnectionError: Invalid data or serverside error. Server returned an HTTP error code
         """
-        return self.default_context.save(entity, force_refresh=force_refresh)
+        if self.context.batch:
+            return self.context.save(entity, force_refresh=force_refresh, parent_resource=parent_resource)
+        return self.context.save(entity, force_refresh=force_refresh)

@@ -42,11 +42,12 @@ class NavigationProperty(object):
     A Property-like object for marking relationships between entities, but does
     not inherit from PropertyBase.
     """
-    def __init__(self, name, entitycls, collection=False, foreign_key=None):
+    def __init__(self, name, entitycls, collection=False, foreign_key=None, navigated_property_type=None):
         from odata.property import PropertyBase
         self.name = name
         self.entitycls = entitycls
         self.is_collection = collection
+        self.navigated_property_type = navigated_property_type
         if isinstance(foreign_key, PropertyBase):
             self.foreign_key = foreign_key.name
         else:
