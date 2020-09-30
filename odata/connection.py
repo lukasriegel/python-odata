@@ -157,7 +157,6 @@ class ODataConnection(object):
 
         self.log.info(u'POST {0}'.format(url))
         self.log.info(u'Payload: {0}'.format(data))
-        data = data.replace('\n', '\r\n')
         response = self._do_post(url, data=data, headers=headers, params=params)
         self._handle_odata_error(response)
         response_ct = response.headers.get('content-type', '')

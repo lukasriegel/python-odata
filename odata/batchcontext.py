@@ -118,7 +118,7 @@ class BatchContext(Context):
             parts_str.append(pl)
 
         parts_str.append('--%s--' % self.boundary)
-        return '\n'.join(parts_str)
+        return '\n'.join(parts_str).replace('\n', '\r\n').encode('utf-8')
 
 
     def query(self, entitycls):
