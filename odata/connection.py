@@ -10,7 +10,20 @@ from requests.exceptions import RequestException
 from odata import version
 from .exceptions import ODataError, ODataConnectionError
 
+try:
+    # noinspection PyUnresolvedReferences
+    from urllib.parse import urlencode
+except ImportError:
+    # noinspection PyUnresolvedReferences
+    from urlparse import urlencode
 
+try:
+    # noinspection PyUnresolvedReferences
+    from urllib.parse import quote
+except ImportError:
+    # noinspection PyUnresolvedReferences
+    from urlparse import quote
+    
 def catch_requests_errors(fn):
     @functools.wraps(fn)
     def inner(*args, **kwargs):
@@ -103,6 +116,9 @@ class ODataConnection(object):
         self.log.info(u'GET {0}'.format(url))
         if params:
             self.log.info(u'Query: {0}'.format(params))
+            params = urlencode(params, quote_via=quote)
+            print(params)
+
 
         response = self._do_get(url, params=params, headers=headers)
         self._handle_odata_error(response)
