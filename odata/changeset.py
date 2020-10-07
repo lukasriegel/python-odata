@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+import urllib
 import json
 import enum
 from uuid import uuid4 as uuid
@@ -40,7 +41,8 @@ class Change:
             parts.append('%s: %s' % (key, value))
         parts.append('')
 
-        parts.append('%s %s HTTP/1.1' % (self.method, self.url))
+        url_encoded = urllib.parse.quote(self.url)
+        parts.append('%s %s HTTP/1.1' % (self.method, url_encoded))
         parts.append('Host: %s' % socket.gethostname())
         parts.append('Content-Type: application/json;type=entry')
         parts.append('')
