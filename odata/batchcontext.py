@@ -3,8 +3,9 @@
 from odata.query import Query
 from odata.context import Context
 from odata.exceptions import ODataError
+from odata.action import Action, Function
 from uuid import uuid4 as uuid
-from odata.changeset import ChangeSet, Change, ChangeAction
+from odata.changeset import ChangeSet, Change, ChangeAction, ActionChange, FunctionChange
 
 class BatchContext(Context):
     def __init__(self, service, session=None, auth=None):
@@ -67,6 +68,7 @@ class BatchContext(Context):
         m = content_id_to_entity_map
         entities = []
         response_map = []
+        processed_content_ids = []
         for entity, content_id in m:
             saved_data = {}
             error_msg = None
@@ -77,6 +79,7 @@ class BatchContext(Context):
                 error_code = 500
                 error_msg = 'Server sent no error message. There might be errors in previous operations of the same batch.'
             else:
+                processed_content_ids.append(content_id)
                 resp_for_entity = resp_for_entity[0]
             
                 if resp_for_entity['status'] < 200 or resp_for_entity['status'] >= 300:
@@ -104,6 +107,18 @@ class BatchContext(Context):
 
             entities.append(entity)
 
+        for res in [x for x in response['responses'] if x['id'] not in processed_content_ids]:
+            if res['status'] < 200 or res['status'] >= 300:
+                error_code = res['status']
+                error_msg = "HTTP %s for content_id '%s' with error %s" % (
+                    res['status'],
+                    res['id'],
+                    res.get('body', {}).get('error', {}).get('message', 'Server sent no error message')
+                )
+                response_map.append((None, error_code, error_msg))
+            else:
+                response_map.append((None, res['status'], None))
+
         return {
             'entities': entities,
             'response_map': response_map,
@@ -128,8 +143,17 @@ class BatchContext(Context):
         # q = Query(entitycls, connection=self.connection)
         # return q
 
-    def call(self, action_or_function, **parameters):
-        raise NotImplementedError('calling an action/function in a batch operation is not implemented')
+    def call(self, action_or_function, callback=None, **parameters):
+        if self._changeset is None:
+            raise Exception('Call open_changeset before doing data modification requests')
+        if isinstance(action_or_function, Action):
+            change = ActionChange(action_or_function, **parameters)
+            self._changeset.add_change(change, callback=callback)
+            return
+        elif isinstance(action_or_function, Function):
+            change = FunctionChange(action_or_function, **parameters)
+            self._changeset.add_change(change, callback=callback)
+            return
 
     def call_with_query(self, action_or_function, query, **parameters):
         raise NotImplementedError('calling an action/function with query in a batch operation is not implemented')
