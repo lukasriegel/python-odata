@@ -45,7 +45,7 @@ class BatchContext(Context):
         
         headers = self.connection.base_headers.copy()
         headers.update({
-            'Content-Type': 'multipart/mixed;boundary=%s' % (self.boundary),
+            'Content-Type': 'multipart/mixed;boundary=%s;charset=utf8' % (self.boundary),
         })
         response = self.connection.execute_post_raw(
             url,
