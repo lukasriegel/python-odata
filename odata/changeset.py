@@ -14,7 +14,7 @@ class Change:
     def __init__(self, url: str, data, action: ChangeAction):
         self.content_id = None
         self.base_headers = {
-          'Content-Type': 'application/http;charset=utf8',
+          'Content-Type': 'application/http;charset=utf-8',
           'Content-Transfer-Encoding': 'binary',
         }
         self.data = data
@@ -42,7 +42,7 @@ class Change:
 
         parts.append('%s %s HTTP/1.1' % (self.method, self.url))
         parts.append('Host: %s' % socket.gethostname())
-        parts.append('Content-Type: application/json;type=entry;charset=utf8')
+        parts.append('Content-Type: application/json;type=entry;charset=utf-8')
         parts.append('')
         parts.append(json.dumps(self.data, indent=2, ensure_ascii=False))
 
@@ -68,7 +68,7 @@ class ChangeSet:
 
     def get_payload(self):
         parts = [
-          'Content-Type: multipart/mixed;boundary=%s;charset=utf8' % (self.get_boundary()),
+          'Content-Type: multipart/mixed;boundary=%s;charset=utf-8' % (self.get_boundary()),
           '',
         ]
 
