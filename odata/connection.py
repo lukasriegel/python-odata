@@ -40,6 +40,7 @@ class ODataConnection(object):
         'Accept': 'application/json',
         'OData-Version': '4.0',
         'User-Agent': 'python-odata {0}'.format(version),
+        'User-Agent': 'python-odata {0}'.format(version),
     }
     timeout = 90
 
@@ -134,7 +135,7 @@ class ODataConnection(object):
 
     def execute_post(self, url, data, params=None):
         headers = {
-            'Content-Type': 'application/json',
+            'Content-Type': 'application/json;charset=utf-8',
         }
         headers.update(self.base_headers)
 
@@ -168,7 +169,7 @@ class ODataConnection(object):
 
     def execute_patch(self, url, data):
         headers = {
-            'Content-Type': 'application/json',
+            'Content-Type': 'application/json;charset=utf-8',
         }
         headers.update(self.base_headers)
 
