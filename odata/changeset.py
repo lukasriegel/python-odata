@@ -42,6 +42,10 @@ class Change:
         parts.append('')
 
         url_encoded = urllib.parse.quote(self.url)
+        if url_encoded.startswith("%24changeset_"):
+            url_encoded = url_encoded.replace("%24changeset_", "$changeset_")
+
+
         parts.append('%s %s HTTP/1.1' % (self.method, url_encoded))
         parts.append('Host: %s' % socket.gethostname())
         parts.append('Content-Type: application/json;type=entry;charset=utf-8')
