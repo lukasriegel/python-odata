@@ -220,24 +220,40 @@ class BatchContext(Context):
         else:
             es_p = parent_resource.__odata__
             entity_type = entity.__odata_schema__['type']
-            parent_entity_type = parent_resource.__odata_schema__['type']
 
             parent_nav_prop = [x for x in es_p.navigation_properties if x[1].navigated_property_type == entity_type][0][1]
-
             content_id = [x for x in self._content_id_to_entity_map if x[0] is parent_resource][0][1]
             # use $<Content-ID>/navProperty as url
             url = '$%s/%s' % (content_id, parent_nav_prop.name)
+        
+        # For deep inserts we must not send (even not with "null" as value) the reference keys. E.g.
+        #       Book -> Page -> Text
+        # When we create a "Text" we must not set the field Page_ID (or however the foreign key is named) in the
+        # request as the server will automatically fill it in by the magic of deep inserts.
+        def filter_insert_data(data, entity_schema, parent=None):
+            parent_type = None if parent is None else parent.__odata_schema__['type']
 
-            # via the url we tell odata that we want to create a sub-entity (e.g. Author = parent and Book = sub).
-            # In case the book has a reference to author (e.g. author_ID) we need to remove it as it has no value and
-            # defaults to a "null"-value if not set. However, we just dont want to send any value (not even null) for this field
-            nav_prop = [x for x in es.navigation_properties if x[1].navigated_property_type == parent_entity_type]
-            if nav_prop and len(nav_prop) > 0:
-                fk = nav_prop[0][1].foreign_key
-                if fk is not None and fk in insert_data:
-                    # remove if it exists in the dict
-                    insert_data.pop(fk)
+            for nav_prop in entity_schema.navigation_properties:
+                fk = nav_prop[1].foreign_key
+                fk_exists = fk is not None and fk in data
+                nested_field = nav_prop[0]
+                nested_field_set = nested_field is not None and nested_field in data
+                links_to_parent = False if parent_resource is None else nav_prop[1].navigated_property_type == parent_type
 
+                if fk_exists:
+                    if nested_field_set:
+                        data.pop(fk)
+                    elif links_to_parent:
+                        data.pop(fk)
+                elif nested_field_set:
+                    nav_prop_cls = nav_prop[1].entitycls()
+                    # recursion for deep inserts via nav properties with a 1:n/1:1 relationship.
+                    filter_insert_data(data[nested_field], nav_prop_cls.__odata__, parent=entity_schema.entity)
+
+            return data
+        filter_insert_data(insert_data, es, parent=parent_resource)
+
+    
         if url is None:
             msg = 'Cannot insert Entity that does not belong to EntitySet: {0}'.format(entity)
             raise ODataError(msg)    

@@ -142,7 +142,7 @@ class ODataConnection(object):
         data = json.dumps(data)
 
         self.log.info(u'POST {0}'.format(url))
-        self.log.info(u'Payload: {0}'.format(data))
+        self.log.debug(u'Payload: {0}'.format(data))
 
         response = self._do_post(url, data=data, headers=headers, params=params)
         self._handle_odata_error(response)
@@ -157,7 +157,7 @@ class ODataConnection(object):
         headers = {**ODataConnection.base_headers, **headers}
 
         self.log.info(u'POST {0}'.format(url))
-        self.log.info(u'Payload: {0}'.format(data))
+        self.log.debug(u'Payload: {0}'.format(data))
         response = self._do_post(url, data=data, headers=headers, params=params)
         self._handle_odata_error(response)
         response_ct = response.headers.get('content-type', '')
@@ -176,7 +176,7 @@ class ODataConnection(object):
         data = json.dumps(data)
 
         self.log.info(u'PATCH {0}'.format(url))
-        self.log.info(u'Payload: {0}'.format(data))
+        self.log.debug(u'Payload: {0}'.format(data))
 
         response = self._do_patch(url, data=data, headers=headers)
         self._handle_odata_error(response)
