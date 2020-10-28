@@ -92,15 +92,14 @@ class BatchContext(Context):
                     )
 
             if error_msg is None:
-                saved_data = resp_for_entity['body']
-                for k in list(saved_data.keys()):
-                    # remove odata annotations in the response
-                    if k.startswith('@odata.'):
-                        saved_data.pop(k)
-                
-                entity.__odata__.reset() # reset dirty flags etc
-                entity.__odata__.update(saved_data)
-                
+                saved_data = resp_for_entity['body'] if 'body' in resp_for_entity else {}
+                if saved_data:
+                    for k in list(saved_data.keys()):
+                        # remove odata annotations in the response
+                        if k.startswith('@odata.'):
+                            saved_data.pop(k)
+                    entity.__odata__.reset() # reset dirty flags etc
+                    entity.__odata__.update(saved_data)
                 response_map.append((entity, resp_for_entity['status'], None))
             else:
                 response_map.append((entity, error_code, error_msg))
@@ -190,16 +189,24 @@ class BatchContext(Context):
         """
         if self._changeset is None:
             raise Exception('Call open_changeset before doing data modification requests')
+        es = entity.__odata__
+        url = entity.__odata__.instance_url[len(self._service.url) - 1:]
+                   
+        if url is None:
+            msg = 'Cannot delete Entity that does not belong to EntitySet: {0}'.format(entity)
+            raise ODataError(msg)    
 
-        raise Exception('Delete still needs to be implemented')
-        # TODO:
-      
-        # self.log.info(u'Deleting entity: {0}'.format(entity))
-        # # url = entity.__odata__.instance_url
-        # url = entity.__odata__.instance_url[len(self._service.url) - 1:]
-        # self.connection.execute_delete(url)
-        # entity.__odata__.persisted = False
-        # self.log.info(u'Success')
+        def cb(self, saved_data):
+            es.reset()
+            self.log.info(u'Success')
+
+        content_id = self._changeset.add_change(Change(
+          url,
+          None,
+          ChangeAction.DELETE,
+        ), callback=cb)
+        self._content_id_to_entity_map.append((entity, content_id))
+        return content_id
 
     def _insert_new(self, entity, parent_resource=None):
         """
