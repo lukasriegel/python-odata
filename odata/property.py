@@ -243,7 +243,7 @@ class FloatProperty(PropertyBase):
     Property that stores a float value
     """
     def serialize(self, value):
-        return value
+        return str(value)
 
     def deserialize(self, value):
         return value
@@ -261,7 +261,7 @@ class DecimalProperty(PropertyBase):
 
     def serialize(self, value):
         if value is not None:
-            return float(value)
+            return str(float(value))
 
     def deserialize(self, value):
         if value is not None:

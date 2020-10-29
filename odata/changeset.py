@@ -48,7 +48,7 @@ class Change:
 
         parts.append('%s %s HTTP/1.1' % (self.method, url_encoded))
         parts.append('Host: %s' % socket.gethostname())
-        parts.append('Content-Type: application/json;type=entry;charset=utf-8')
+        parts.append('Content-Type: application/json;type=entry;charset=utf-8;IEEE754Compatible=true')
         parts.append('')
         parts.append(json.dumps(self.data, indent=2, ensure_ascii=False))
 

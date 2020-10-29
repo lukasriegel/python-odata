@@ -135,7 +135,7 @@ class ODataConnection(object):
 
     def execute_post(self, url, data, params=None):
         headers = {
-            'Content-Type': 'application/json;charset=utf-8',
+            'Content-Type': 'application/json;charset=utf-8;IEEE754Compatible=true',
         }
         headers.update(self.base_headers)
 
@@ -169,7 +169,7 @@ class ODataConnection(object):
 
     def execute_patch(self, url, data):
         headers = {
-            'Content-Type': 'application/json;charset=utf-8',
+            'Content-Type': 'application/json;charset=utf-8;IEEE754Compatible=true',
         }
         headers.update(self.base_headers)
 
