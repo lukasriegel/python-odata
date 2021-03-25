@@ -3,8 +3,9 @@
 from odata.query import Query
 from odata.context import Context
 from odata.exceptions import ODataError
+from odata.action import Action, Function
 from uuid import uuid4 as uuid
-from odata.changeset import ChangeSet, Change, ChangeAction
+from odata.changeset import ChangeSet, Change, ChangeAction, ActionChange, FunctionChange
 
 class BatchContext(Context):
     def __init__(self, service, session=None, auth=None):
@@ -67,6 +68,7 @@ class BatchContext(Context):
         m = content_id_to_entity_map
         entities = []
         response_map = []
+        processed_content_ids = []
         for entity, content_id in m:
             saved_data = {}
             error_msg = None
@@ -77,6 +79,7 @@ class BatchContext(Context):
                 error_code = 500
                 error_msg = 'Server sent no error message. There might be errors in previous operations of the same batch.'
             else:
+                processed_content_ids.append(content_id)
                 resp_for_entity = resp_for_entity[0]
             
                 if resp_for_entity['status'] < 200 or resp_for_entity['status'] >= 300:
@@ -89,20 +92,31 @@ class BatchContext(Context):
                     )
 
             if error_msg is None:
-                saved_data = resp_for_entity['body']
-                for k in list(saved_data.keys()):
-                    # remove odata annotations in the response
-                    if k.startswith('@odata.'):
-                        saved_data.pop(k)
-                
-                entity.__odata__.reset() # reset dirty flags etc
-                entity.__odata__.update(saved_data)
-                
+                saved_data = resp_for_entity['body'] if 'body' in resp_for_entity else {}
+                if saved_data:
+                    for k in list(saved_data.keys()):
+                        # remove odata annotations in the response
+                        if k.startswith('@odata.'):
+                            saved_data.pop(k)
+                    entity.__odata__.reset() # reset dirty flags etc
+                    entity.__odata__.update(saved_data)
                 response_map.append((entity, resp_for_entity['status'], None))
             else:
                 response_map.append((entity, error_code, error_msg))
 
             entities.append(entity)
+
+        for res in [x for x in response['responses'] if x['id'] not in processed_content_ids]:
+            if res['status'] < 200 or res['status'] >= 300:
+                error_code = res['status']
+                error_msg = "HTTP %s for content_id '%s' with error %s" % (
+                    res['status'],
+                    res['id'],
+                    res.get('body', {}).get('error', {}).get('message', 'Server sent no error message')
+                )
+                response_map.append((None, error_code, error_msg))
+            else:
+                response_map.append((None, res['status'], None))
 
         return {
             'entities': entities,
@@ -118,7 +132,7 @@ class BatchContext(Context):
             parts_str.append(pl)
 
         parts_str.append('--%s--' % self.boundary)
-        return '\n'.join(parts_str)
+        return '\n'.join(parts_str).replace('\n', '\r\n').encode('utf-8')
 
 
     def query(self, entitycls):
@@ -128,8 +142,17 @@ class BatchContext(Context):
         # q = Query(entitycls, connection=self.connection)
         # return q
 
-    def call(self, action_or_function, **parameters):
-        raise NotImplementedError('calling an action/function in a batch operation is not implemented')
+    def call(self, action_or_function, callback=None, **parameters):
+        if self._changeset is None:
+            raise Exception('Call open_changeset before doing data modification requests')
+        if isinstance(action_or_function, Action):
+            change = ActionChange(action_or_function, **parameters)
+            self._changeset.add_change(change, callback=callback)
+            return
+        elif isinstance(action_or_function, Function):
+            change = FunctionChange(action_or_function, **parameters)
+            self._changeset.add_change(change, callback=callback)
+            return
 
     def call_with_query(self, action_or_function, query, **parameters):
         raise NotImplementedError('calling an action/function with query in a batch operation is not implemented')
@@ -166,16 +189,24 @@ class BatchContext(Context):
         """
         if self._changeset is None:
             raise Exception('Call open_changeset before doing data modification requests')
+        es = entity.__odata__
+        url = entity.__odata__.instance_url[len(self._service.url) - 1:]
+                   
+        if url is None:
+            msg = 'Cannot delete Entity that does not belong to EntitySet: {0}'.format(entity)
+            raise ODataError(msg)    
 
-        raise Exception('Delete still needs to be implemented')
-        # TODO:
-      
-        # self.log.info(u'Deleting entity: {0}'.format(entity))
-        # # url = entity.__odata__.instance_url
-        # url = entity.__odata__.instance_url[len(self._service.url) - 1:]
-        # self.connection.execute_delete(url)
-        # entity.__odata__.persisted = False
-        # self.log.info(u'Success')
+        def cb(self, saved_data):
+            es.reset()
+            self.log.info(u'Success')
+
+        content_id = self._changeset.add_change(Change(
+          url,
+          None,
+          ChangeAction.DELETE,
+        ), callback=cb)
+        self._content_id_to_entity_map.append((entity, content_id))
+        return content_id
 
     def _insert_new(self, entity, parent_resource=None):
         """
@@ -196,24 +227,40 @@ class BatchContext(Context):
         else:
             es_p = parent_resource.__odata__
             entity_type = entity.__odata_schema__['type']
-            parent_entity_type = parent_resource.__odata_schema__['type']
 
             parent_nav_prop = [x for x in es_p.navigation_properties if x[1].navigated_property_type == entity_type][0][1]
-
             content_id = [x for x in self._content_id_to_entity_map if x[0] is parent_resource][0][1]
             # use $<Content-ID>/navProperty as url
             url = '$%s/%s' % (content_id, parent_nav_prop.name)
+        
+        # For deep inserts we must not send (even not with "null" as value) the reference keys. E.g.
+        #       Book -> Page -> Text
+        # When we create a "Text" we must not set the field Page_ID (or however the foreign key is named) in the
+        # request as the server will automatically fill it in by the magic of deep inserts.
+        def filter_insert_data(data, entity_schema, parent=None):
+            parent_type = None if parent is None else parent.__odata_schema__['type']
 
-            # via the url we tell odata that we want to create a sub-entity (e.g. Author = parent and Book = sub).
-            # In case the book has a reference to author (e.g. author_ID) we need to remove it as it has no value and
-            # defaults to a "null"-value if not set. However, we just dont want to send any value (not even null) for this field
-            nav_prop = [x for x in es.navigation_properties if x[1].navigated_property_type == parent_entity_type]
-            if nav_prop and len(nav_prop) > 0:
-                fk = nav_prop[0][1].foreign_key
-                if fk is not None and fk in insert_data:
-                    # remove if it exists in the dict
-                    insert_data.pop(fk)
+            for nav_prop in entity_schema.navigation_properties:
+                fk = nav_prop[1].foreign_key
+                fk_exists = fk is not None and fk in data
+                nested_field = nav_prop[0]
+                nested_field_set = nested_field is not None and nested_field in data
+                links_to_parent = False if parent_resource is None else nav_prop[1].navigated_property_type == parent_type
 
+                if fk_exists:
+                    if nested_field_set:
+                        data.pop(fk)
+                    elif links_to_parent:
+                        data.pop(fk)
+                elif nested_field_set:
+                    nav_prop_cls = nav_prop[1].entitycls()
+                    # recursion for deep inserts via nav properties with a 1:n/1:1 relationship.
+                    filter_insert_data(data[nested_field], nav_prop_cls.__odata__, parent=entity_schema.entity)
+
+            return data
+        filter_insert_data(insert_data, es, parent=parent_resource)
+
+    
         if url is None:
             msg = 'Cannot insert Entity that does not belong to EntitySet: {0}'.format(entity)
             raise ODataError(msg)    
